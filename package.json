@@ -2,7 +2,7 @@
   "name": "starz",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://insanetedddie.github.io/starz",  // adjust if repo name is different
+  "homepage": "https://insanetedddie.github.io/starz",  
   "dependencies": {
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.6.4",
