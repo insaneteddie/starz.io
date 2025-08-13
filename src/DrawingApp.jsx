@@ -2,16 +2,13 @@ import React, { useRef, useState, useEffect } from "react";
 import Toolbar from "./Toolbar";
 import AdColumn from "./AdColumn";
 
+
 export default function DrawingApp() {
   const canvasRef = useRef(null);
-  const [pointCount, setPointCount] = useState(10);
+  const [pointCount, setPointCount] = useState(6);
   const [bgColor, setBgColor] = useState("#ffffff");
-  const [lineColor, setLineColor] = useState("#000000");
-  const [mode, setMode] = useState("center");
-  const [gradientOn, setGradientOn] = useState(false);
-  const [gradientColor2, setGradientColor2] = useState("#ff0000");
-  const [gradientDir, setGradientDir] = useState("inside-out");
-  const [lineWidth, setLineWidth] = useState(2);
+  const [lineColor, setLineColor] = useState("#0000ff"); // default line color blue
+  const [canvasSize, setCanvasSize] = useState({ width: 400, height: 400 });
 
   // Resize canvas dynamically on window resize
   useEffect(() => {
@@ -137,14 +134,6 @@ export default function DrawingApp() {
       ctx.lineTo(p2.x, p2.y);
       ctx.stroke();
     }
-  };
-
-  const exportPNG = () => {
-    const canvas = canvasRef.current;
-    const link = document.createElement("a");
-    link.download = "drawing.png";
-    link.href = canvas.toDataURL("image/png");
-    link.click();
   };
 
   return (
