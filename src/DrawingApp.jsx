@@ -13,20 +13,19 @@ export default function DrawingApp() {
   const [gradientDir, setGradientDir] = useState("inside-out");
   const [lineWidth, setLineWidth] = useState(2);
 
-  // Canvas resize and redraw
+  // Responsive canvas size
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const resize = () => {
-      canvas.width = window.innerWidth * 0.6;
-      canvas.height = window.innerHeight * 0.6;
-      drawCanvas();
+    const handleResize = () => {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.width = window.innerWidth * 0.6;
+        canvas.height = window.innerHeight * 0.6;
+        drawCanvas();
+      }
     };
-
-    window.addEventListener("resize", resize);
-    resize();
-    return () => window.removeEventListener("resize", resize);
+    window.addEventListener("resize", handleResize);
+    handleResize();
+    return () => window.removeEventListener("resize", handleResize);
   }, [pointCount, bgColor, lineColor, mode, gradientOn, gradientColor2, gradientDir, lineWidth]);
 
   const drawCanvas = () => {
@@ -35,108 +34,108 @@ export default function DrawingApp() {
     const w = canvas.width;
     const h = canvas.height;
 
-    // Clear background
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, w, h);
 
-    // Determine stroke style
-    let strokeStyle = lineColor;
+    ctx.lineWidth = lineWidth;
+
+    // Set color (gradient or solid)
+    let colorFn = () => lineColor;
     if (gradientOn) {
       let grad;
       if (gradientDir === "inside-out" || gradientDir === "outside-in") {
-        grad = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, Math.max(w,h)/2);
-        if (gradientDir === "inside-out") {
-          grad.addColorStop(0, lineColor);
-          grad.addColorStop(1, gradientColor2);
-        } else {
-          grad.addColorStop(0, gradientColor2);
-          grad.addColorStop(1, lineColor);
-        }
+        grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) / 2);
       } else if (gradientDir === "left-right") {
-        grad = ctx.createLinearGradient(0,0,w,0);
-        grad.addColorStop(0,lineColor);
-        grad.addColorStop(1,gradientColor2);
-      } else if (gradientDir === "top-bottom") {
-        grad = ctx.createLinearGradient(0,0,0,h);
-        grad.addColorStop(0,lineColor);
-        grad.addColorStop(1,gradientColor2);
+        grad = ctx.createLinearGradient(0, 0, w, 0);
+      } else {
+        grad = ctx.createLinearGradient(0, 0, 0, h);
       }
-      strokeStyle = grad;
+
+      if (gradientDir === "outside-in") {
+        grad.addColorStop(0, gradientColor2);
+        grad.addColorStop(1, lineColor);
+      } else {
+        grad.addColorStop(0, lineColor);
+        grad.addColorStop(1, gradientColor2);
+      }
+      colorFn = () => grad;
     }
 
-    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = colorFn();
 
-    // Draw center mode
+    // --- Center Mode ---
     if (mode === "center" || mode === "both") {
-      const cx = w/2;
-      const cy = h/2;
-      const radius = Math.min(w,h)/2 - 20;
-      const points = [];
-      for(let i=0;i<pointCount;i++){
-        const angle = (i/pointCount) * Math.PI*2;
-        points.push({
-          x: cx + radius * Math.cos(angle),
-          y: cy + radius * Math.sin(angle)
-        });
+      const cx = w / 2;
+      const cy = h / 2;
+      const stepX = (w / 2) / pointCount;
+      const stepY = (h / 2) / pointCount;
+
+      const xPoints = [];
+      const yPoints = [];
+
+      for (let i = 1; i <= pointCount; i++) {
+        xPoints.push(cx + i * stepX); // right
+        xPoints.push(cx - i * stepX); // left
+        yPoints.push(cy + i * stepY); // down
+        yPoints.push(cy - i * stepY); // up
       }
-      points.forEach((p,i)=>{
-        const partnerIndex = (pointCount - i) % pointCount;
-        const partner = points[partnerIndex];
-        ctx.beginPath();
-        ctx.strokeStyle = strokeStyle;
-        ctx.moveTo(p.x,p.y);
-        ctx.lineTo(partner.x,partner.y);
-        ctx.stroke();
-      });
 
-      // Draw axes
-      ctx.beginPath();
-      ctx.strokeStyle = lineColor;
-      ctx.moveTo(cx,0);
-      ctx.lineTo(cx,h);
-      ctx.moveTo(0,cy);
-      ctx.lineTo(w,cy);
-      ctx.stroke();
+      // Connect X points to Y points
+      xPoints.forEach(x => {
+        yPoints.forEach(y => {
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+        });
+      });
     }
 
-    // Draw corners mode (2 axes)
-    if(mode === "corners" || mode === "both"){
-      const stepX = w/(pointCount-1);
-      const stepY = h/(pointCount-1);
+    // --- Corners Mode ---
+    if (mode === "corners" || mode === "both") {
       const corners = [
-        {x:0,y:0},       // top-left
-        {x:w,y:0},       // top-right
-        {x:0,y:h},       // bottom-left
-        {x:w,y:h}        // bottom-right
+        { x: 0, y: 0 },       // top-left
+        { x: w, y: 0 },       // top-right
+        { x: 0, y: h },       // bottom-left
+        { x: w, y: h }        // bottom-right
       ];
-      corners.forEach(corner=>{
-        for(let i=0;i<pointCount;i++){
-          ctx.beginPath();
-          ctx.strokeStyle = strokeStyle;
-          // horizontal line from corner along top/bottom
-          ctx.moveTo(corner.x,corner.y);
-          ctx.lineTo(i*stepX, corner.y);
-          ctx.stroke();
+
+      corners.forEach(corner => {
+        const stepX = w / (pointCount - 1);
+        const stepY = h / (pointCount - 1);
+        const xPoints = [];
+        const yPoints = [];
+
+        if (corner.x === 0) {
+          for (let i = 1; i < pointCount; i++) xPoints.push(corner.x + i * stepX);
+        } else {
+          for (let i = 1; i < pointCount; i++) xPoints.push(corner.x - i * stepX);
         }
-        for(let j=0;j<pointCount;j++){
-          ctx.beginPath();
-          ctx.strokeStyle = strokeStyle;
-          // vertical line from corner along left/right
-          ctx.moveTo(corner.x,corner.y);
-          ctx.lineTo(corner.x, j*stepY);
-          ctx.stroke();
+
+        if (corner.y === 0) {
+          for (let i = 1; i < pointCount; i++) yPoints.push(corner.y + i * stepY);
+        } else {
+          for (let i = 1; i < pointCount; i++) yPoints.push(corner.y - i * stepY);
         }
+
+        xPoints.forEach(x => {
+          yPoints.forEach(y => {
+            ctx.beginPath();
+            ctx.moveTo(corner.x, corner.y);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+          });
+        });
       });
     }
-  }
+  };
 
   const exportPNG = () => {
-    const canvas = canvasRef.current;
     const link = document.createElement("a");
     link.download = "drawing.png";
-    link.href = canvas.toDataURL("image/png");
+    link.href = canvasRef.current.toDataURL("image/png");
     link.click();
-  }
+  };
 
   return (
     <div className="flex flex-col items-center w-full">
@@ -171,5 +170,5 @@ export default function DrawingApp() {
         Export as PNG
       </button>
     </div>
-  )
+  );
 }
