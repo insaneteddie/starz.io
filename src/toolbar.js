@@ -60,7 +60,7 @@ export default function Toolbar({
           onChange={(e) => setMode(e.target.value)}
           className="ml-2 border rounded px-2 py-1"
         >
-          <option value="circle">Circle</option>
+          <option value="center">Graph</option>
           <option value="corners">Corners</option>
           <option value="both">Both</option>
         </select>
