@@ -1,268 +1,218 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 
-export default function DrawingApp() {
+export default function DrawingApp({
+  size,
+  pointCount,
+  bgColor,
+  colorMode,
+  solidColor,
+  gradientStart,
+  gradientEnd,
+  gradientDirection,
+  lineThickness,
+  drawMode, // "center" | "corners" | "both"
+  bgImageUrl,
+}) {
   const canvasRef = useRef(null);
-  const [pointCount, setPointCount] = useState(6);
-  const [bgColor, setBgColor] = useState("#ffffff");
-  const [lineColor, setLineColor] = useState("#0000ff"); // default line color blue
-  const [canvasSize, setCanvasSize] = useState({ width: 400, height: 400 });
+  const imageRef = useRef(null);
 
-  // Resize canvas dynamically on window resize
+  // Load/clear background image
   useEffect(() => {
-    function updateSize() {
-      const maxWidth = window.innerWidth * 0.6; // 60% width max for canvas container
-      const size = Math.min(maxWidth, 600);
-      setCanvasSize({ width: size, height: size });
+    if (!bgImageUrl) {
+      imageRef.current = null;
+      draw();
+      return;
     }
-    updateSize();
-    window.addEventListener("resize", updateSize);
-    return () => window.removeEventListener("resize", updateSize);
-  }, []);
+    const img = new Image();
+    img.onload = () => {
+      imageRef.current = img;
+      draw();
+    };
+    img.src = bgImageUrl;
+  }, [bgImageUrl, size]); // re-draw when size changes too
 
-  // Draw Adsense ads once on mount
   useEffect(() => {
-    if (window.adsbygoogle && Array.isArray(window.adsbygoogle)) {
-      try {
-        window.adsbygoogle.push({});
-        window.adsbygoogle.push({});
-      } catch (e) {
-        // Fail silently
-      }
+    draw();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    size,
+    pointCount,
+    bgColor,
+    colorMode,
+    solidColor,
+    gradientStart,
+    gradientEnd,
+    gradientDirection,
+    lineThickness,
+    drawMode,
+  ]);
+
+  const getGradient = (ctx, width, height) => {
+    let grad;
+    const cx = width / 2;
+    const cy = height / 2;
+    switch (gradientDirection) {
+      case "inside-out":
+        grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(width, height) / 2);
+        break;
+      case "outside-in":
+        grad = ctx.createRadialGradient(cx, cy, Math.min(width, height) / 2, cx, cy, 0);
+        break;
+      case "left-right":
+        grad = ctx.createLinearGradient(0, 0, width, 0);
+        break;
+      case "right-left":
+        grad = ctx.createLinearGradient(width, 0, 0, 0);
+        break;
+      case "top-bottom":
+        grad = ctx.createLinearGradient(0, 0, 0, height);
+        break;
+      case "bottom-top":
+        grad = ctx.createLinearGradient(0, height, 0, 0);
+        break;
+      default:
+        grad = ctx.createLinearGradient(0, 0, width, 0);
     }
-  }, []);
+    grad.addColorStop(0, gradientStart);
+    grad.addColorStop(1, gradientEnd);
+    return grad;
+  };
 
-  useEffect(() => {
-    drawCanvas();
-  }, [pointCount, bgColor, lineColor, canvasSize]);
+  const adjustColor = (hex, factor = 0.5) => {
+    // lighten towards white by factor
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    const rn = Math.min(255, Math.round(r + (255 - r) * factor));
+    const gn = Math.min(255, Math.round(g + (255 - g) * factor));
+    const bn = Math.min(255, Math.round(b + (255 - b) * factor));
+    return `rgb(${rn}, ${gn}, ${bn})`;
+  };
 
-  const drawCanvas = () => {
+  const draw = () => {
     const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.width = size;
+    canvas.height = size;
     const ctx = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
     const cx = width / 2;
     const cy = height / 2;
-    const padding = 40;
 
-    ctx.clearRect(0, 0, width, height);
+    // Background (color)
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, width, height);
 
-    // Draw axes in black
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 2;
+    // Background image (if any) scaled to cover
+    if (imageRef.current) {
+      const img = imageRef.current;
+      // cover: scale uniformly to cover entire canvas
+      const scale = Math.max(width / img.width, height / img.height);
+      const iw = img.width * scale;
+      const ih = img.height * scale;
+      const ix = (width - iw) / 2;
+      const iy = (height - ih) / 2;
+      ctx.drawImage(img, ix, iy, iw, ih);
+    }
+
+    // Axis color: solid or gradientStart
+    const axisColor = colorMode === "solid" ? solidColor : gradientStart;
+
+    // Draw axes for center mode visibility (even if corners selected, keep axes consistent)
+    ctx.strokeStyle = axisColor;
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(padding, cy);
-    ctx.lineTo(width - padding, cy);
-    ctx.moveTo(cx, padding);
-    ctx.lineTo(cx, height - padding);
+    ctx.moveTo(cx, 0);
+    ctx.lineTo(cx, height);
+    ctx.moveTo(0, cy);
+    ctx.lineTo(width, cy);
     ctx.stroke();
 
-    if (pointCount < 1) {
-      ctx.fillStyle = "red";
-      ctx.font = "16px sans-serif";
-      ctx.fillText("Please enter number ≥ 1", 20, 30);
-      return;
-    }
+    // Prepare stroke style(s)
+    const mainStroke =
+      colorMode === "solid" ? solidColor : getGradient(ctx, width, height);
+    // If "both", make a second tone to differentiate corner vs center drawings
+    const secondaryStroke =
+      colorMode === "solid"
+        ? adjustColor(solidColor, 0.55)
+        : getGradient(ctx, width, height); // gradient stays same for simplicity
 
-    // Lengths for each axis side (distance from center to edge minus padding)
-    const xPosLength = width - cx - padding;
-    const xNegLength = cx - padding;
-    const yPosLength = cy - padding;
-    const yNegLength = height - cy - padding;
-
-    // Generate points for each axis (coordinates only, no drawing)
-    const generatePoints = (centerCoord, length, count, isHorizontal, positive) => {
+    // Drawing helpers
+    const drawCenterAxis = (strokeStyle) => {
+      const radius = Math.min(width, height) / 2 - 20;
       const pts = [];
-      for (let i = 1; i <= count; i++) {
-        const fraction = i / count;
-        const offset = fraction * length;
-        const pos = positive ? centerCoord + offset : centerCoord - offset;
-        pts.push(isHorizontal ? { x: pos, y: cy } : { x: cx, y: pos });
+      for (let i = 0; i < pointCount; i++) {
+        const angle = (i / pointCount) * Math.PI * 2;
+        const x = cx + radius * Math.cos(angle);
+        const y = cy + radius * Math.sin(angle);
+        pts.push({ x, y });
       }
-      return pts;
+      ctx.lineWidth = lineThickness;
+      ctx.strokeStyle = strokeStyle;
+      pts.forEach((p, i) => {
+        const j = (pointCount - i) % pointCount;
+        const q = pts[j];
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(q.x, q.y);
+        ctx.stroke();
+      });
     };
 
-    const posXPoints = generatePoints(cx, xPosLength, pointCount, true, true);
-    const negXPoints = generatePoints(cx, xNegLength, pointCount, true, false);
-    const posYPoints = generatePoints(cy, yPosLength, pointCount, false, false); // positive Y goes up, so negative offset
-    const negYPoints = generatePoints(cy, yNegLength, pointCount, false, true);
+    const drawCornerAxis = (strokeStyle) => {
+      ctx.lineWidth = lineThickness;
+      ctx.strokeStyle = strokeStyle;
 
-    // Draw connecting lines with user-selected color
-    ctx.strokeStyle = lineColor;
-    ctx.lineWidth = 2;
+      const corners = [
+        { ox: 0, oy: 0 },           // top-left
+        { ox: width, oy: 0 },       // top-right
+        { ox: 0, oy: height },      // bottom-left
+        { ox: width, oy: height },  // bottom-right
+      ];
 
-    // Pos X <-> Neg Y
-    for (let i = 0; i < pointCount; i++) {
-      const p1 = posXPoints[i];
-      const p2 = negYPoints[pointCount - 1 - i];
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
+      corners.forEach(({ ox, oy }) => {
+        const pts = [];
+        const xStep = width / (pointCount - 1);
+        const yStep = height / (pointCount - 1);
+
+        // Points along the horizontal edge from this corner
+        for (let i = 0; i < pointCount; i++) {
+          pts.push({ x: ox === 0 ? i * xStep : width - i * xStep, y: oy });
+        }
+        // Points along the vertical edge from this corner
+        for (let i = 0; i < pointCount; i++) {
+          pts.push({ x: ox, y: oy === 0 ? i * yStep : height - i * yStep });
+        }
+
+        // Connect corner to each edge point (L-shaped axes only)
+        pts.forEach((p) => {
+          ctx.beginPath();
+          ctx.moveTo(ox, oy);
+          ctx.lineTo(p.x, p.y);
+          ctx.stroke();
+        });
+      });
+    };
+
+    // Draw according to mode
+    if (drawMode === "center") {
+      drawCenterAxis(mainStroke);
+    } else if (drawMode === "corners") {
+      drawCornerAxis(mainStroke);
+    } else {
+      // both
+      drawCenterAxis(mainStroke);
+      drawCornerAxis(secondaryStroke);
     }
-
-    // Pos Y <-> Neg X
-    for (let i = 0; i < pointCount; i++) {
-      const p1 = posYPoints[i];
-      const p2 = negXPoints[pointCount - 1 - i];
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
-    }
-
-    // Neg X <-> Neg Y
-    for (let i = 0; i < pointCount; i++) {
-      const p1 = negXPoints[i];
-      const p2 = negYPoints[pointCount - 1 - i];
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
-    }
-
-    // Pos X <-> Pos Y
-    for (let i = 0; i < pointCount; i++) {
-      const p1 = posXPoints[i];
-      const p2 = posYPoints[pointCount - 1 - i];
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
-    }
-  };
-
-  const exportPNG = () => {
-    const canvas = canvasRef.current;
-    const link = document.createElement("a");
-    link.download = "drawing.png";
-    link.href = canvas.toDataURL("image/png");
-    link.click();
   };
 
   return (
-    <div
-      style={{
-        display: "flex",
-        maxWidth: 900,
-        margin: "auto",
-        padding: 16,
-        gap: 16,
-        minHeight: "100vh",
-        boxSizing: "border-box",
-        alignItems: "flex-start",
-      }}
-    >
-      {/* Left Ad column */}
-      <div style={{ width: 120, minWidth: 120 }}>
-        <ins
-          className="adsbygoogle"
-          style={{ display: "block", width: "120px", height: "600px" }}
-          data-ad-client="ca-pub-9132155293089442"
-          data-ad-slot="3293582365"
-          data-ad-format="vertical"
-          data-full-width-responsive="false"
-        />
-      </div>
-
-      {/* Center content: controls + canvas + button */}
-      <div
-        style={{
-          flexGrow: 1,
-          maxWidth: 600,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: 16,
-        }}
-      >
-        <h1 className="text-2xl font-bold text-center" style={{ marginBottom: 0 }}>
-          Starz
-        </h1>
-
-        {/* Toolbar */}
-        <div
-          style={{
-            width: "100%",
-            display: "flex",
-            justifyContent: "space-around",
-            gap: 16,
-            flexWrap: "wrap",
-          }}
-        >
-          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            Number of Points (≥ 1):
-            <input
-              type="number"
-              min="1"
-              value={pointCount}
-              onChange={(e) => setPointCount(Number(e.target.value))}
-              style={{ width: 60 }}
-            />
-          </label>
-
-          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            Background Color:
-            <input
-              type="color"
-              value={bgColor}
-              onChange={(e) => setBgColor(e.target.value)}
-              style={{ width: 40, height: 30, padding: 0, border: "none" }}
-            />
-          </label>
-
-          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            Line Color:
-            <input
-              type="color"
-              value={lineColor}
-              onChange={(e) => setLineColor(e.target.value)}
-              style={{ width: 40, height: 30, padding: 0, border: "none" }}
-            />
-          </label>
-        </div>
-
-        {/* Canvas */}
-        <canvas
-          ref={canvasRef}
-          width={canvasSize.width}
-          height={canvasSize.height}
-          style={{ border: "1px solid #ccc", borderRadius: 8, maxWidth: "100%" }}
-        />
-
-        {/* Export button */}
-        <button
-          onClick={exportPNG}
-          style={{
-            backgroundColor: "#2563EB",
-            color: "#fff",
-            padding: "10px 20px",
-            borderRadius: 6,
-            border: "none",
-            cursor: "pointer",
-            width: "100%",
-            maxWidth: 600,
-            transition: "background-color 0.2s ease",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#1D4ED8")}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#2563EB")}
-        >
-          Export as PNG
-        </button>
-      </div>
-
-      {/* Right Ad column */}
-      <div style={{ width: 120, minWidth: 120 }}>
-        <ins
-          className="adsbygoogle"
-          style={{ display: "block", width: "120px", height: "600px" }}
-          data-ad-client="ca-pub-9132155293089442"
-          data-ad-slot="3293582365"
-          data-ad-format="vertical"
-          data-full-width-responsive="false"
-        />
-      </div>
-    </div>
+    <canvas
+      id="starz-canvas"
+      ref={canvasRef}
+      className="border rounded shadow"
+      style={{ width: size + "px", height: size + "px" }}
+    />
   );
 }
