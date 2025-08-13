@@ -13,127 +13,137 @@ export default function DrawingApp() {
   const [gradientDir, setGradientDir] = useState("inside-out");
   const [lineWidth, setLineWidth] = useState(2);
 
-  // Responsive canvas size
+  // Resize canvas dynamically on window resize
   useEffect(() => {
-    const handleResize = () => {
-      const canvas = canvasRef.current;
-      if (canvas) {
-        canvas.width = window.innerWidth * 0.6;
-        canvas.height = window.innerHeight * 0.6;
-        drawCanvas();
+    function updateSize() {
+      const maxWidth = window.innerWidth * 0.6; // 60% width max for canvas container
+      const size = Math.min(maxWidth, 600);
+      setCanvasSize({ width: size, height: size });
+    }
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
+  }, []);
+
+  // Draw Adsense ads once on mount
+  useEffect(() => {
+    if (window.adsbygoogle && Array.isArray(window.adsbygoogle)) {
+      try {
+        window.adsbygoogle.push({});
+        window.adsbygoogle.push({});
+      } catch (e) {
+        // Fail silently
       }
-    };
-    window.addEventListener("resize", handleResize);
-    handleResize();
-    return () => window.removeEventListener("resize", handleResize);
-  }, [pointCount, bgColor, lineColor, mode, gradientOn, gradientColor2, gradientDir, lineWidth]);
+    }
+  }, []);
+
+  useEffect(() => {
+    drawCanvas();
+  }, [pointCount, bgColor, lineColor, canvasSize]);
 
   const drawCanvas = () => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
-    const w = canvas.width;
-    const h = canvas.height;
+    const width = canvas.width;
+    const height = canvas.height;
+    const cx = width / 2;
+    const cy = height / 2;
+    const padding = 40;
 
+    ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, w, h);
+    ctx.fillRect(0, 0, width, height);
 
-    ctx.lineWidth = lineWidth;
+    // Draw axes in black
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(padding, cy);
+    ctx.lineTo(width - padding, cy);
+    ctx.moveTo(cx, padding);
+    ctx.lineTo(cx, height - padding);
+    ctx.stroke();
 
-    // Set color (gradient or solid)
-    let colorFn = () => lineColor;
-    if (gradientOn) {
-      let grad;
-      if (gradientDir === "inside-out" || gradientDir === "outside-in") {
-        grad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) / 2);
-      } else if (gradientDir === "left-right") {
-        grad = ctx.createLinearGradient(0, 0, w, 0);
-      } else {
-        grad = ctx.createLinearGradient(0, 0, 0, h);
-      }
-
-      if (gradientDir === "outside-in") {
-        grad.addColorStop(0, gradientColor2);
-        grad.addColorStop(1, lineColor);
-      } else {
-        grad.addColorStop(0, lineColor);
-        grad.addColorStop(1, gradientColor2);
-      }
-      colorFn = () => grad;
+    if (pointCount < 1) {
+      ctx.fillStyle = "red";
+      ctx.font = "16px sans-serif";
+      ctx.fillText("Please enter number ≥ 1", 20, 30);
+      return;
     }
 
-    ctx.strokeStyle = colorFn();
+    // Lengths for each axis side (distance from center to edge minus padding)
+    const xPosLength = width - cx - padding;
+    const xNegLength = cx - padding;
+    const yPosLength = cy - padding;
+    const yNegLength = height - cy - padding;
 
-    // --- Center Mode ---
-    if (mode === "center" || mode === "both") {
-      const cx = w / 2;
-      const cy = h / 2;
-      const stepX = (w / 2) / pointCount;
-      const stepY = (h / 2) / pointCount;
-
-      const xPoints = [];
-      const yPoints = [];
-
-      for (let i = 1; i <= pointCount; i++) {
-        xPoints.push(cx + i * stepX); // right
-        xPoints.push(cx - i * stepX); // left
-        yPoints.push(cy + i * stepY); // down
-        yPoints.push(cy - i * stepY); // up
+    // Generate points for each axis (coordinates only, no drawing)
+    const generatePoints = (centerCoord, length, count, isHorizontal, positive) => {
+      const pts = [];
+      for (let i = 1; i <= count; i++) {
+        const fraction = i / count;
+        const offset = fraction * length;
+        const pos = positive ? centerCoord + offset : centerCoord - offset;
+        pts.push(isHorizontal ? { x: pos, y: cy } : { x: cx, y: pos });
       }
+      return pts;
+    };
 
-      // Connect X points to Y points
-      xPoints.forEach(x => {
-        yPoints.forEach(y => {
-          ctx.beginPath();
-          ctx.moveTo(cx, cy);
-          ctx.lineTo(x, y);
-          ctx.stroke();
-        });
-      });
+    const posXPoints = generatePoints(cx, xPosLength, pointCount, true, true);
+    const negXPoints = generatePoints(cx, xNegLength, pointCount, true, false);
+    const posYPoints = generatePoints(cy, yPosLength, pointCount, false, false); // positive Y goes up, so negative offset
+    const negYPoints = generatePoints(cy, yNegLength, pointCount, false, true);
+
+    // Draw connecting lines with user-selected color
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 2;
+
+    // Pos X <-> Neg Y
+    for (let i = 0; i < pointCount; i++) {
+      const p1 = posXPoints[i];
+      const p2 = negYPoints[pointCount - 1 - i];
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
     }
 
-    // --- Corners Mode ---
-    if (mode === "corners" || mode === "both") {
-      const corners = [
-        { x: 0, y: 0 },       // top-left
-        { x: w, y: 0 },       // top-right
-        { x: 0, y: h },       // bottom-left
-        { x: w, y: h }        // bottom-right
-      ];
+    // Pos Y <-> Neg X
+    for (let i = 0; i < pointCount; i++) {
+      const p1 = posYPoints[i];
+      const p2 = negXPoints[pointCount - 1 - i];
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+    }
 
-      corners.forEach(corner => {
-        const stepX = w / (pointCount - 1);
-        const stepY = h / (pointCount - 1);
-        const xPoints = [];
-        const yPoints = [];
+    // Neg X <-> Neg Y
+    for (let i = 0; i < pointCount; i++) {
+      const p1 = negXPoints[i];
+      const p2 = negYPoints[pointCount - 1 - i];
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+    }
 
-        if (corner.x === 0) {
-          for (let i = 1; i < pointCount; i++) xPoints.push(corner.x + i * stepX);
-        } else {
-          for (let i = 1; i < pointCount; i++) xPoints.push(corner.x - i * stepX);
-        }
-
-        if (corner.y === 0) {
-          for (let i = 1; i < pointCount; i++) yPoints.push(corner.y + i * stepY);
-        } else {
-          for (let i = 1; i < pointCount; i++) yPoints.push(corner.y - i * stepY);
-        }
-
-        xPoints.forEach(x => {
-          yPoints.forEach(y => {
-            ctx.beginPath();
-            ctx.moveTo(corner.x, corner.y);
-            ctx.lineTo(x, y);
-            ctx.stroke();
-          });
-        });
-      });
+    // Pos X <-> Pos Y
+    for (let i = 0; i < pointCount; i++) {
+      const p1 = posXPoints[i];
+      const p2 = posYPoints[pointCount - 1 - i];
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
     }
   };
 
   const exportPNG = () => {
+    const canvas = canvasRef.current;
     const link = document.createElement("a");
     link.download = "drawing.png";
-    link.href = canvasRef.current.toDataURL("image/png");
+    link.href = canvas.toDataURL("image/png");
     link.click();
   };
 
